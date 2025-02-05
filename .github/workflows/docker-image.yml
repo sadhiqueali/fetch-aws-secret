@@ -5,23 +5,7 @@ on:
     branches:
       - main
 
-
 jobs:
-  push-to-ecr:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1  # Change this to your AWS region
-
-      - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
-        with:
-          registry: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com  # Make sure the region matches
-
   build-and-push:
     runs-on: ubuntu-latest
 
@@ -30,20 +14,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Set up Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      # Configure AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-      # Log in to AWS ECR
+      # Log in to Amazon ECR using AWS CLI
       - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
-
-      # Build the Docker image
-      - name: Build Docker image
         run: |
-          docker build -t ${{ secrets.AWS_ECR_REPO_URI }}:latest .
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 637423644841.dkr.ecr.us-east-1.amazonaws.com
 
-      # Push the Docker image to ECR
-      - name: Push Docker image to ECR
+      # Build Docker Image
+      - name: Build Docker Image
         run: |
-          docker push ${{ secrets.AWS_ECR_REPO_URI }}:latest
+          docker build -t python_as_web .
+
+      # Tag Docker Image
+      - name: Tag Docker Image
+        run: |
+          docker tag python_as_web:latest 637423644841.dkr.ecr.us-east-1.amazonaws.com/python_as_web:latest
+
+      # Push Docker Image to AWS ECR
+      - name: Push Docker Image
+        run: |
+          docker push 637423644841.dkr.ecr.us-east-1.amazonaws.com/python_as_web:latest
