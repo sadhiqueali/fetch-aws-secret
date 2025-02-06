@@ -73,7 +73,7 @@ def handle_other_methods():
     log_request_details(request)
     return jsonify({"message": f"{request.method} method handled."}), 200
 
-if _name_ == '_main_':
+if __name__ == '__main__':
     # Run the Flask app
     port = 5000  # Change this as needed
     logger.info(f"Starting server on port {port}...")
