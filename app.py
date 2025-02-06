@@ -1,89 +1,80 @@
 import boto3
 from botocore.exceptions import ClientError
 import json
-import http.server
-import socketserver
-import datetime
-import argparse
 import logging
-
-
-#
+import os
+from flask import Flask, request, jsonify
+import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
 
-parser = argparse.ArgumentParser(description='Start a simple HTTP server')
-parser.add_argument('-p', '--port', type=int, default=5000, help='The port to listen on')
-args = parser.parse_args()
+# Create Flask app
+app = Flask(_name_)
 
-PORT = args.port
+# Fetch environment variables for profile and org
+PROFILE = os.getenv('profile', 'default')  # Default to 'default' if not set
+ORG = os.getenv('service', 'default_service')     # Default to 'default_org' if not set
 
-class MyHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        if self.get_path() == "health":
-            self.send_200_response("healthy")
-        self.log_request_details()
-        secret_name = "dev/awssecretfetch/tenant"
-        region_name = "eu-north-1"
-        secret = self.get_secret(secret_name, region_name)
-        logger.info(f"Fetched secret: {secret}")
-        self.send_response(200)
-        self.end_headers()
+# Health endpoint
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint."""
+    log_request_details(request)
+    return jsonify({"status": "healthy"}), 200
 
-    def get_secret(self, secret_name, region_name):
-        # Create a Secrets Manager client
-        session = boto3.session.Session()
-        client = session.client(
-            service_name='secretsmanager',
-            region_name=region_name
-        )
+# Endpoint to fetch AWS Secret
+@app.route('/fetch-secret', methods=['GET'])
+def fetch_secret():
+    """Fetch the AWS Secret."""
+    tenant = request.args.get('tenant')  # Get tenant from query parameter
+    if not tenant:
+        return jsonify({"error": "Tenant parameter is missing"}), 400
+    
+    # Construct the secret name dynamically using profile, org, and tenant
+    secret_name = f"{PROFILE}/{ORG}/{tenant}"
+    region_name = "eu-north-1"
+    
+    try:
+        secret = get_secret(secret_name, region_name)
+        logger.info(f"Fetched secret for tenant {tenant}: {secret}")
+        return jsonify(secret), 200
+    except Exception as e:
+        logger.error(f"Error fetching secret for tenant {tenant}: {e}")
+        return jsonify({"error": str(e)}), 500
 
-        try:
-            get_secret_value_response = client.get_secret_value(
-                SecretId=secret_name
-            )
-        except ClientError as e:
-            # For a list of exceptions thrown, see
-            # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
-            logger.error(f"Error fetching secret: {e}")
-            raise e
+# Helper to fetch AWS secret
+def get_secret(secret_name, region_name):
+    """Fetch a secret from AWS Secrets Manager."""
+    session = boto3.session.Session()
+    client = session.client(service_name='secretsmanager', region_name=region_name)
 
-        secret = get_secret_value_response['SecretString']
-        return json.loads(secret)
+    try:
+        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+    except ClientError as e:
+        logger.error(f"Error fetching secret: {e}")
+        raise e
+    
+    secret = get_secret_value_response['SecretString']
+    return json.loads(secret)
 
-    def send_200_response(self, message, send_body=True):
-        self.log_request_details()
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/html')
-        self.end_headers()
-        if send_body:
-            self.wfile.write(message.encode('utf-8'))
-            
-    def do_POST(self):
-        self.log_request_details()
-        self.send_response(200)
-        self.end_headers()
+# Generic method to log requests
+def log_request_details(req):
+    """Logs the details of the HTTP request."""
+    request_time = datetime.datetime.now()
+    content_length = len(req.data)  # Get the size of data
+    logger.info(f"--- Request Info ---\nTime: {request_time}\nMethod: {req.method}\nPath: {req.path}\nHeaders: {dict(req.headers)}\nBody: {req.data.decode('utf-8') if content_length else 'No Body'}\n-------------------")
 
-    def do_PUT(self):
-        self.log_request_details()
-        self.send_response(200)
-        self.end_headers()
+# Catch-all route for other HTTP methods
+@app.route('/', methods=['POST', 'PUT', 'DELETE'])
+def handle_other_methods():
+    """Handles POST, PUT, DELETE requests."""
+    log_request_details(request)
+    return jsonify({"message": f"{request.method} method handled."}), 200
 
-    def do_DELETE(self):
-        self.log_request_details()
-        self.send_response(200)
-        self.end_headers()
-
-    def log_request_details(self):
-        request_time = datetime.datetime.now()
-        content_length = int(self.headers.get('Content-Length', 0)) # Gets the size of data
-        post_data = self.rfile.read(content_length) # Gets the data itself
-        logger.info(f"---------------------------------------------------START---------------------------------------------------\n###################    Time: {request_time}\n###################  Method: {self.command}\n###################    Path: {self.path}\n################### Headers:\n{self.headers}\n###################    Body:\n{post_data.decode('utf-8')}\n---------------------------------------------------END---------------------------------------------------")
-
-#os.chdir(RESOURCE_DIRECTORY)
-
-with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
-    logger.info(f"serving at port {PORT}")
-    httpd.serve_forever()
+if _name_ == '_main_':
+    # Run the Flask app
+    port = 5000  # Change this as needed
+    logger.info(f"Starting server on port {port}...")
+    app.run(host='0.0.0.0', port=port)
