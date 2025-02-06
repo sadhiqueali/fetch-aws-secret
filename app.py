@@ -8,10 +8,10 @@ import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 # Create Flask app
-app = Flask(_name_)
+app = Flask(__name__)
 
 # Fetch environment variables for profile and org
 PROFILE = os.getenv('profile', 'default')  # Default to 'default' if not set
