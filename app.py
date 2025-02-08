@@ -34,7 +34,7 @@ def fetch_secret():
     
     # Construct the secret name dynamically using profile, org, and tenant
     secret_name = f"{PROFILE}/{ORG}/{tenant}"
-    region_name = "es-east-1"
+    region_name = "us-east-1"
     
     try:
         secret = get_secret(secret_name, region_name)
